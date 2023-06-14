@@ -28,10 +28,11 @@ def download_with_retry(url, retry=3):
     for _ in range(retry):
         try:
             download_video(url)
-            break
+            return True
         except:
             print('download failed, retrying...')
             continue
+    return False
 
 def run_webdriver(url):
     # use selenium to get video url
@@ -60,11 +61,66 @@ def find_video_url(driver):
     video_url = video.get_attribute('src')
     return video_url
 
+def track_clipboard():
+    import pyperclip
+    import time
+    import subprocess
+    failed_urls = []
+    success_urls = set()
+    print('tracking clipboard...')
+    # loop to track clipboard
+    # if clipboard contains url, download video
+    # track every 1 second
+    previous = ''
+    # expect KeyboardInterrupt and return 0
+    try:
+        while True:
+            # get clipboard
+            clipboard = pyperclip.paste()
+            if clipboard != previous:
+                # if clipboard contains url
+                if 'iwara.tv' in clipboard:
+                    print('url detected, downloading...')
+                    # use subprocess to download video in background
+                    # ['python', '-m', 'iwara', clipboard]
+                    subprocess.Popen(['python', '-m', 'iwara', clipboard])
+                    print('download complete')
+                    previous = clipboard
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print('exiting...')
+        return 0
 
 if __name__ == '__main__':
+    failed_urls = []
+    success_urls = set()
+    import sys
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument('url', help='iwara video url')
+    # track clipboard option, when 'track' is used, url is not required
+    parser.add_argument('-t', '--track', action='store_true', help='track clipboard for iwara url')
+    # add url argument, if not specified, use ''
+    parser.add_argument('url', nargs='?', default='', help='iwara url')
     args = parser.parse_args()
     # download video
-    download_with_retry(args.url)
+    if args.track:
+        track_clipboard()
+    elif 'iwara.tv' in args.url:
+        result = download_with_retry(args.url)
+        if not result:
+            print('download failed')
+            failed_urls.append(args.url)
+        else:
+            print('download complete')
+            success_urls.add(args.url)
+        if len(failed_urls) > 0:
+            print('failed urls:')
+            for url in failed_urls:
+                print(url)
+                # write in ./failed.txt
+                with open('failed.txt', 'a') as f:
+                    f.write(url + '\n')
+                sys.exit(1)
+    else:
+        print('invalid url')
+        sys.exit(1)
